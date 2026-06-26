@@ -1,0 +1,160 @@
+from modules.modulo1_carga import cargar_csv
+from modules.modulo3_anomalias import entrenar_detector
+from modules.modulo3_autoencoder import entrenar_autoencoder
+from modules.modulo3_random_forest import entrenar_random_forest
+from modules.modulo6_evaluacion_no_supervisada import evaluar_detector_no_supervisado, comparar_modelos_no_supervisados
+
+import os
+import glob
+import pandas as pd
+
+CSV_EVALUACION = 'data/30948.csv'
+
+def validar_sistema():
+    print("\n" + "=" * 60)
+    print("VALIDACIÓN DEL SISTEMA — QA")
+    print("=" * 60)
+    errores = []
+
+    print("ℹ️ Modelo clasificador omitido: el enfoque principal es no supervisado")
+
+    if not os.path.exists('modelo_anomalias.pkl'):
+        errores.append("❌ modelo_anomalias.pkl (Isolation Forest) no encontrado")
+    else:
+        print("✅ Modelo Isolation Forest encontrado")
+
+    if not os.path.exists('modelo_anomalias_pca.pkl'):
+        errores.append("❌ modelo_anomalias_pca.pkl (Isolation Forest con PCA) no encontrado")
+    else:
+        print("✅ Modelo Isolation Forest con PCA encontrado")
+
+    if not os.path.exists('modelo_autoencoder.pkl'):
+        errores.append("❌ modelo_autoencoder.pkl (Autoencoder) no encontrado")
+    else:
+        print("✅ Modelo Autoencoder encontrado")
+
+    if not os.path.exists('modelo_autoencoder_pca.pkl'):
+        errores.append("❌ modelo_autoencoder_pca.pkl (Autoencoder con PCA) no encontrado")
+    else:
+        print("✅ Modelo Autoencoder con PCA encontrado")
+
+    if not os.path.exists('modelo_random_forest.pkl'):
+        errores.append("❌ modelo_random_forest.pkl (Random Forest) no encontrado")
+    else:
+        print("✅ Modelo Random Forest encontrado")
+
+    if not os.path.exists('modelo_random_forest_pca.pkl'):
+        errores.append("❌ modelo_random_forest_pca.pkl (Random Forest con PCA) no encontrado")
+    else:
+        print("✅ Modelo Random Forest con PCA encontrado")
+
+    try:
+        from modules.modulo4_base_datos import get_engine
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(__import__('sqlalchemy').text("SELECT 1"))
+        print("✅ Conexión a Supabase correcta")
+    except Exception as e:
+        errores.append(f"❌ Error de conexión a base de datos: {e}")
+
+    archivos = glob.glob('data/*.csv')
+    if not archivos:
+        errores.append("❌ No hay archivos CSV en la carpeta data/")
+    else:
+        print(f"✅ {len(archivos)} archivos CSV disponibles para entrenamiento")
+
+    try:
+        from modules.modulo1_carga import cargar_csv
+        from modules.modulo3_anomalias import detectar_anomalias
+        from modules.modulo3_autoencoder import detectar_anomalias_autoencoder
+        from modules.modulo3_random_forest import detectar_anomalias_random_forest
+        from modules.modulo5_reportes import mostrar_reportes
+        print("✅ Todos los módulos importan correctamente")
+    except Exception as e:
+        errores.append(f"❌ Error al importar módulos: {e}")
+
+    print("\n" + "-" * 60)
+    if errores:
+        print("RESULTADO: ⚠️  Se encontraron problemas:")
+        for e in errores:
+            print(f"  {e}")
+    else:
+        print("RESULTADO: ✅ Sistema validado correctamente — sin problemas")
+    print("=" * 60 + "\n")
+    return len(errores) == 0
+
+
+
+# --- ENTRENAMIENTO ---
+archivos = glob.glob('data/*.csv')
+archivos_entrenamiento = [a for a in archivos if os.path.basename(a) != '30948.csv']
+print(f"Archivos para entrenamiento: {len(archivos_entrenamiento)}")
+print(f"Archivo reservado para evaluación: {CSV_EVALUACION}\n")
+
+df_total = None
+
+for archivo in archivos_entrenamiento:
+    print(f"Procesando: {archivo}")
+    try:
+        df = cargar_csv(archivo)
+        if df_total is None:
+            df_total = df
+        else:
+            df_total = pd.concat([df_total, df], ignore_index=True)
+    except Exception as e:
+        print(f"Error en {archivo}: {e}")
+
+print(f"\nTotal de registros para entrenamiento: {len(df_total)}")
+
+print("\n=== ENTRENAMIENTO SIN PCA ===")
+print("1. Entrenando detector de anomalías Isolation Forest (Sin PCA)...")
+modelo_if = entrenar_detector(df_total, use_pca=False)
+
+print("\n2. Entrenando detector de anomalías Autoencoder (Sin PCA)...")
+modelo_ae = entrenar_autoencoder(df_total, use_pca=False)
+
+print("\n3. Entrenando detector de anomalías Random Forest (Sin PCA)...")
+modelo_rf = entrenar_random_forest(df_total, use_pca=False)
+
+print("\n=== ENTRENAMIENTO CON PCA ===")
+print("1. Entrenando detector de anomalías Isolation Forest (Con PCA)...")
+modelo_if_pca = entrenar_detector(df_total, use_pca=True)
+
+print("\n2. Entrenando detector de anomalías Autoencoder (Con PCA)...")
+modelo_ae_pca = entrenar_autoencoder(df_total, use_pca=True)
+
+print("\n3. Entrenando detector de anomalías Random Forest (Con PCA)...")
+modelo_rf_pca = entrenar_random_forest(df_total, use_pca=True)
+
+print("\nEntrenamiento completo de todos los modelos (con y sin PCA).")
+
+# --- EVALUACIÓN Y COMPARACIÓN ---
+print("\nCargando CSV de evaluación independiente...")
+df_prueba = cargar_csv(CSV_EVALUACION)
+
+print("\n============================================================")
+print("EVALUACIÓN DE MODELOS: ANTES DE PCA (SIN PCA)")
+print("============================================================")
+df_res_if, df_res_ae, df_res_rf = comparar_modelos_no_supervisados(
+    df_prueba,
+    modelo_if,
+    modelo_ae,
+    modelo_rf,
+    salida_csv="resultados_evaluacion_no_supervisada.csv",
+    titulo="ANTES DE PCA"
+)
+
+print("\n============================================================")
+print("EVALUACIÓN DE MODELOS: DESPUÉS DE PCA (CON PCA)")
+print("============================================================")
+df_res_if_pca, df_res_ae_pca, df_res_rf_pca = comparar_modelos_no_supervisados(
+    df_prueba,
+    modelo_if_pca,
+    modelo_ae_pca,
+    modelo_rf_pca,
+    salida_csv="resultados_evaluacion_no_supervisada_pca.csv",
+    titulo="DESPUÉS DE PCA"
+)
+
+# --- VALIDACIÓN QA ---
+validar_sistema()
