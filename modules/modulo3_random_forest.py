@@ -140,9 +140,10 @@ def detectar_anomalias_random_forest(df, use_pca=False):
             X_pca = np.hstack((X_pca_cont, X_bin))
             prob_anomaly = model_rf.predict_proba(X_pca)[:, 1]
         else:
+            model_rf = modelo
             if hasattr(modelo, 'feature_names_in_'):
                 X = X[list(modelo.feature_names_in_)]
-            prob_anomaly = modelo.predict_proba(X)[:, 1]
+            prob_anomaly = model_rf.predict_proba(X)[:, 1]
         df['anomalia_score'] = 0.5 - prob_anomaly
         df['es_anomalia'] = (prob_anomaly > 0.5) & (~df['es_free_game'])
 
@@ -180,4 +181,4 @@ def detectar_anomalias_random_forest(df, use_pca=False):
     total_free_games = df['es_free_game_inusual'].sum()
     print(f"[RF] Anomalías detectadas: {total_anomalias} de {len(df)} registros ({total_anomalias/len(df)*100:.2f}%)")
     
-    return df, modelo_rf
+    return df, model_rf
