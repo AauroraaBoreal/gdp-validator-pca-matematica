@@ -178,7 +178,23 @@ def pagina_validar():
         help="Archivo de jugadas exportado del sistema de GDP Studios"
     )
 
+    if not uploaded_file:
+        if 'last_uploaded_file_key' in st.session_state:
+            del st.session_state['last_uploaded_file_key']
+            for key in ['df_procesado', 'retiros_encontrados', 'retiro_confirmado',
+                        'monto_validar', 'seleccion_retiro']:
+                if key in st.session_state:
+                    del st.session_state[key]
+
     if uploaded_file:
+        file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+        if st.session_state.get('last_uploaded_file_key') != file_key:
+            st.session_state['last_uploaded_file_key'] = file_key
+            for key in ['df_procesado', 'retiros_encontrados', 'retiro_confirmado',
+                        'monto_validar', 'seleccion_retiro']:
+                if key in st.session_state:
+                    del st.session_state[key]
+
         st.info(f"Archivo cargado: **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
 
         # Intentar detectar la moneda del archivo cargado para mostrarla en el input
